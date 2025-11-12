@@ -1,0 +1,5 @@
+python-dotenv
+imaplib2
+pyodbc
+langchain
+langchain-groq
