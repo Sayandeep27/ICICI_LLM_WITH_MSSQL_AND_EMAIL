@@ -1,63 +1,68 @@
 import pyodbc
 
-def ensure_department_exists(dept_name):
+def get_connection():
+    return pyodbc.connect(
+        "DRIVER={ODBC Driver 17 for SQL Server};"
+        "SERVER=localhost;"
+        "DATABASE=ApplessDB;"
+        "Trusted_Connection=yes;"
+    )
+
+def update_task_status(task_id, new_status):
     try:
-        if not dept_name or not isinstance(dept_name, str):
-            dept_name = "IT"
-        dept_name = dept_name.strip().lower()
+        conn = get_connection()
+        cur = conn.cursor()
 
-        mapping = {
-            "hr": "HR",
-            "finance": "Finance",
-            "it": "IT",
-            "hardware": "Hardware"
-        }
+        cur.execute("""
+            UPDATE projects 
+            SET status = ? 
+            WHERE id = ?
+        """, (new_status, task_id))
 
-        return mapping.get(dept_name, "IT")
+        conn.commit()
+
+        print(f"✅ Task {task_id} updated to {new_status}")
 
     except Exception as e:
-        print("Error ensuring department exists:", e)
+        print("❌ DB Update Error:", e)
+    finally:
+        conn.close()
+
+
+def ensure_department_exists(name):
+    mapping = {
+        "hr": "HR",
+        "finance": "Finance",
+        "it": "IT",
+        "hardware": "Hardware"
+    }
+    if not name:
         return "IT"
+    return mapping.get(name.lower(), "IT")
+
 
 def insert_project(data):
     try:
-        conn = pyodbc.connect(
-            "DRIVER={ODBC Driver 17 for SQL Server};"
-            "SERVER=localhost;"
-            "DATABASE=ApplessDB;"
-            "Trusted_Connection=yes;"
-        )
-        cursor = conn.cursor()
+        conn = get_connection()
+        cur = conn.cursor()
 
-        project_type = data.get("project_type", "Unknown")
-        owner_email = data.get("owner_email", "")
-        assigned_dept = ensure_department_exists(data.get("assigned_dept"))
-        time_required = data.get("time_required", "Not specified")
-        status = data.get("status", "pending")
-        priority = data.get("priority", "MEDIUM")
-        summary = data.get("summary", "No summary provided")
-
-        cursor.execute("""
+        cur.execute("""
             INSERT INTO projects (project_type, owner_email, assigned_dept, time_required, status, priority, summary)
             VALUES (?, ?, ?, ?, ?, ?, ?)
         """, (
-            project_type,
-            owner_email,
-            assigned_dept,
-            time_required,
-            status,
-            priority,
-            summary
+            data["project_type"],
+            data["owner_email"],
+            ensure_department_exists(data["assigned_dept"]),
+            data["time_required"],
+            data["status"],
+            data["priority"],
+            data["summary"]
         ))
 
         conn.commit()
-        print(f"✅ Inserted new project: {project_type}")
+        print(f"🟩 Inserted new project: {data['project_type']}")
 
     except Exception as e:
-        print("Error inserting project:", e)
+        print("❌ DB Error insert:", e)
     finally:
-        try:
-            cursor.close()
-            conn.close()
-        except:
-            pass
+        conn.close()
