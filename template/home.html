@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block content %}
+
+<h1>Departments</h1>
+<p>Select a department to view assigned projects:</p>
+
+<ul>
+    {% for d in departments %}
+        <li><a href="/{{ d.name }}">{{ d.name }}</a></li>
+    {% endfor %}
+</ul>
+
+{% endblock %}

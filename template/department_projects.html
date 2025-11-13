@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block content %}
+
+<h1>{{ dept }} Department Projects</h1>
+
+{% if projects %}
+<table>
+    <tr>
+        <th>ID</th>
+        <th>Project Type</th>
+        <th>Owner Email</th>
+        <th>Assigned Dept</th>
+        <th>Time Required</th>
+        <th>Status</th>
+        <th>Priority</th>
+        <th>Created At</th>
+        <th>Summary</th>
+    </tr>
+
+    {% for p in projects %}
+    <tr>
+        <td>{{ p.id }}</td>
+        <td>{{ p.project_type }}</td>
+        <td>{{ p.owner_email }}</td>
+        <td>{{ p.assigned_dept }}</td>
+        <td>{{ p.time_required }}</td>
+        <td>{{ p.status }}</td>
+        <td>{{ p.priority }}</td>
+        <td>{{ p.created_at }}</td>
+        <td>{{ p.summary }}</td>
+    </tr>
+    {% endfor %}
+</table>
+
+{% else %}
+<p>No projects found for this department.</p>
+{% endif %}
+
+{% endblock %}
