@@ -31,6 +31,7 @@
               <th>Priority</th>
               <th>Created</th>
               <th>Summary</th>
+              <th>Updates</th>
             </tr>
           </thead>
           <tbody>
@@ -43,6 +44,18 @@
               <td>{{ p.priority or 'NOT SPECIFIED' }}</td>
               <td>{{ p.created_at }}</td>
               <td>{{ p.summary or 'No summary provided' }}</td>
+              <td>
+                {% set updates = updates_map.get(p.id, []) %}
+                {% if updates %}
+                  <ul class="mb-0">
+                    {% for u in updates %}
+                      <li><small><strong>{{ u.update_type }}</strong> by {{ u.from_email }} — {{ u.created_at }}<br>{{ u.message }}</small></li>
+                    {% endfor %}
+                  </ul>
+                {% else %}
+                  <small class="text-muted">No updates</small>
+                {% endif %}
+              </td>
             </tr>
             {% endfor %}
           </tbody>
