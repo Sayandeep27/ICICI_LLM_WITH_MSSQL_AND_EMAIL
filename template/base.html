@@ -1,18 +1,162 @@
-<!DOCTYPE html>
-<html>
+<!doctype html>
+<html lang="en">
 <head>
-    <title>{{ title if title else "Department Dashboard" }}</title>
-    <style>
-        body { font-family: Arial, sans-serif; margin: 30px; }
-        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
-        th, td { border: 1px solid #ccc; padding: 8px; }
-        th { background: #eee; }
-        a { text-decoration: none; color: blue; }
-    </style>
+  <meta charset="utf-8">
+  <title>{% block title %}Workflow Dashboard{% endblock %}</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+
+  <style>
+    /* ICICI-like premium (Option C) theme */
+    :root{
+      --brand-orange: #F26F21;
+      --brand-dark: #1A2B49;
+      --accent-gold: #D39E3A;
+      --muted: #6b7280;
+      --card-bg: #ffffff;
+      --page-bg: #fbfbfb;
+      --radius: 10px;
+    }
+
+    body{
+      background: linear-gradient(180deg, #fffdf9 0%, var(--page-bg) 100%);
+      color: var(--brand-dark);
+      font-family: "Segoe UI", Roboto, system-ui, -apple-system, "Helvetica Neue", Arial;
+      -webkit-font-smoothing:antialiased;
+    }
+
+    .topbar{
+      background: linear-gradient(90deg, rgba(242,111,33,1), rgba(211,158,58,0.95));
+      color: white;
+      padding: 14px 20px;
+      border-bottom-left-radius: 14px;
+      border-bottom-right-radius: 14px;
+      box-shadow: 0 6px 18px rgba(30,30,30,0.06);
+      position: sticky;
+      top: 0;
+      z-index: 1000;
+    }
+
+    .brand {
+      font-weight:700;
+      letter-spacing:0.2px;
+      font-size: 1.15rem;
+    }
+
+    .brand-sub {
+      font-weight:600;
+      opacity:0.95;
+      font-size:0.85rem;
+      margin-left:6px;
+    }
+
+    .container-main{
+      max-width:1200px;
+      margin: 28px auto;
+      padding: 0 16px;
+    }
+
+    .card-icici {
+      background: var(--card-bg);
+      border-radius: var(--radius);
+      box-shadow: 0 8px 24px rgba(30,30,30,0.06);
+      border: 1px solid rgba(20,20,20,0.03);
+      padding: 18px;
+    }
+
+    .dept-card {
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      height:92px;
+      border-radius: 12px;
+      background: linear-gradient(180deg, #fff 0%, rgba(242,111,33,0.04) 100%);
+      border: 1px solid rgba(242,111,33,0.08);
+      color: var(--brand-dark);
+      font-weight:700;
+      font-size:1.05rem;
+    }
+
+    .btn-icici {
+      background: var(--brand-dark);
+      color: #fff;
+      border-radius: 8px;
+      padding: 8px 14px;
+      font-weight:600;
+      border: none;
+    }
+
+    .btn-outline-icici {
+      color: var(--brand-dark);
+      border-color: rgba(26,43,73,0.08);
+      background: transparent;
+      border-radius:8px;
+      padding:7px 12px;
+    }
+
+    .filter-row .form-select, .filter-row .form-control {
+      border-radius: 8px;
+      height:42px;
+    }
+
+    table.table td, table.table th {
+      vertical-align: middle;
+    }
+
+    .updates-column {
+      max-width: 320px;
+      white-space: normal;
+    }
+
+    .update-item {
+      border-left: 3px solid rgba(242,111,33,0.18);
+      padding:8px 12px;
+      background: linear-gradient(180deg, #fff 0%, rgba(240,240,240,0.02) 100%);
+      border-radius: 6px;
+      margin-bottom:8px;
+      font-size:0.95rem;
+    }
+
+    .badge-priority-high { background:#ff6b4a; color:#fff; }
+    .badge-priority-medium { background:#f7a451; color:#fff; }
+    .badge-priority-low { background:#8fbf6b; color:#fff; }
+
+    footer.site-footer {
+      margin-top:28px;
+      padding:18px;
+      text-align:center;
+      color:var(--muted);
+    }
+
+    /* modal textarea */
+    .reply-textarea { min-height:140px; resize:vertical; border-radius:8px; padding:10px; border:1px solid rgba(0,0,0,0.06);}
+  </style>
+
+  {% block head %}{% endblock %}
 </head>
 <body>
+  <div class="topbar d-flex align-items-center justify-content-between">
+    <div class="d-flex align-items-center">
+      <div class="brand"> ICICI Bank </div>
+      <div class="brand-sub ms-2">Incoming requests & task tracking</div>
+    </div>
+    <div>
+      <a href="{{ url_for('home') }}" class="btn btn-sm btn-outline-light me-2">Home</a>
+      <a href="{{ url_for('sender_lookup') }}" class="btn btn-sm btn-light">Find My Tasks</a>
+    </div>
+  </div>
 
-{% block content %}{% endblock %}
+  <div class="container-main">
+    <div class="card-icici">
+      {% block content %}{% endblock %}
+    </div>
 
+    <footer class="site-footer">
+      Built for ICICI-style theme · Workflow dashboard
+    </footer>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+  {% block scripts %}{% endblock %}
 </body>
 </html>

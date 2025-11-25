@@ -1,67 +1,65 @@
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <title>Tasks for {{ email_display }}</title>
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-</head>
-<body>
-  <div class="container py-4">
-    <a href="{{ url_for('sender_lookup') }}" class="btn btn-link">&larr; Back</a>
-    <h2 class="mb-2">Tasks for <small class="text-muted">{{ email_display }}</small></h2>
+{% extends "base.html" %}
+{% block title %}Tasks for {{ email_display }}{% endblock %}
 
-    <div class="mb-3">
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h3>Tasks for <small class="text-muted">{{ email_display }}</small></h3>
+    <div class="mt-1">
       <span class="badge bg-secondary">Total: {{ total }}</span>
       <span class="badge bg-warning text-dark">Pending: {{ pending }}</span>
       <span class="badge bg-success">Resolved: {{ resolved }}</span>
     </div>
-
-    {% if not projects %}
-      <div class="alert alert-info">No tasks found for this email.</div>
-    {% else %}
-      <div class="table-responsive">
-        <table class="table table-hover">
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>Type</th>
-              <th>Assigned Dept</th>
-              <th>Status</th>
-              <th>Priority</th>
-              <th>Created</th>
-              <th>Summary</th>
-              <th>Updates</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for p in projects %}
-            <tr>
-              <td>{{ p.id }}</td>
-              <td>{{ p.project_type }}</td>
-              <td>{{ p.assigned_dept }}</td>
-              <td>{{ p.status or 'pending' }}</td>
-              <td>{{ p.priority or 'NOT SPECIFIED' }}</td>
-              <td>{{ p.created_at }}</td>
-              <td>{{ p.summary or 'No summary provided' }}</td>
-              <td>
-                {% set updates = updates_map.get(p.id, []) %}
-                {% if updates %}
-                  <ul class="mb-0">
-                    {% for u in updates %}
-                      <li><small><strong>{{ u.update_type }}</strong> by {{ u.from_email }} — {{ u.created_at }}<br>{{ u.message }}</small></li>
-                    {% endfor %}
-                  </ul>
-                {% else %}
-                  <small class="text-muted">No updates</small>
-                {% endif %}
-              </td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-    {% endif %}
   </div>
-</body>
-</html>
+  <div>
+    <a href="{{ url_for('sender_lookup') }}" class="btn btn-outline-icici">Back</a>
+  </div>
+</div>
+
+{% if not projects %}
+  <div class="alert alert-info">No tasks found for this email.</div>
+{% else %}
+  <div class="table-responsive">
+    <table class="table table-hover align-middle">
+      <thead>
+        <tr>
+          <th>ID</th><th>Type</th><th>Assigned</th><th>Status</th><th>Priority</th><th>Created</th><th>Summary</th><th>Updates</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in projects %}
+        <tr>
+          <td>{{ p.id }}</td>
+          <td>{{ p.project_type }}</td>
+          <td>{{ p.assigned_dept }}</td>
+          <td>
+            {% if p.status and p.status|lower=='resolved' %}
+              <span class="badge bg-success">resolved</span>
+            {% else %}
+              <span class="badge bg-warning text-dark">{{ p.status or 'pending' }}</span>
+            {% endif %}
+          </td>
+          <td>{{ p.priority or 'NOT SPEC' }}</td>
+          <td>{{ p.created_at }}</td>
+          <td>{{ p.summary or 'No summary' }}</td>
+          <td>
+            {% for uid, ups in updates_map.items() %}
+            {% endfor %}
+            {% if updates_map[p.id] %}
+              {% for u in updates_map[p.id] %}
+              <div class="update-item">
+                <div style="font-size:0.95rem">{{ u.message }}</div>
+                <div class="text-muted" style="font-size:0.8rem">{{ u.from_email }} · {{ u.created_at }}</div>
+              </div>
+              {% endfor %}
+            {% else %}
+              <div class="text-muted small">No updates</div>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% endif %}
+{% endblock %}
