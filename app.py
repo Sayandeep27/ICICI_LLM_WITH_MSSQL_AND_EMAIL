@@ -2,6 +2,7 @@
 from flask import Flask, render_template, request, redirect, url_for, jsonify
 import os
 import urllib.parse
+import re
 
 from db_writer import (
     get_connection,
@@ -26,18 +27,34 @@ def fetch_departments():
     return departments
 
 
+# ------------------------------------------------------------
+# Detect if admin reply means "resolved"
+# ------------------------------------------------------------
+RESOLVED_WORDS = [
+    "resolved", "issue resolved", "your issue is resolved",
+    "done", "fixed", "solved", "completed", "closed"
+]
+
+def is_resolved_message(msg: str) -> bool:
+    if not msg:
+        return False
+    msg = msg.lower()
+    return any(word in msg for word in RESOLVED_WORDS)
+
+
 @app.route("/")
 def home():
     departments = fetch_departments()
     return render_template("index.html", departments=departments)
 
 
-# Department page with filters (status, priority, email)
+# ------------------------------------------------------------
+# Department view with filters
+# ------------------------------------------------------------
 @app.route("/<dept_name>")
 def department_view(dept_name):
     dept_lower = dept_name.strip().lower()
 
-    # filters (from query string)
     status_filter = (request.args.get("status") or "").strip().lower()
     priority_filter = (request.args.get("priority") or "").strip().lower()
     email_filter = (request.args.get("email") or "").strip().lower()
@@ -45,7 +62,6 @@ def department_view(dept_name):
     conn = get_connection()
     cur = conn.cursor()
 
-    # Validate department exists
     cur.execute("SELECT name FROM departments WHERE LOWER(name) = ?", (dept_lower,))
     row = cur.fetchone()
     if not row:
@@ -53,7 +69,6 @@ def department_view(dept_name):
         return f"Invalid department name: {dept_name}", 400
     actual_name = row[0]
 
-    # Build dynamic query with filters
     query = """
         SELECT id, project_type, owner_email, assigned_dept,
                time_required, status, priority, created_at, summary
@@ -71,7 +86,6 @@ def department_view(dept_name):
         params.append(priority_filter)
 
     if email_filter:
-        # match substrings inside owner_email
         query += " AND LOWER(owner_email) LIKE ?"
         params.append(f"%{email_filter}%")
 
@@ -80,9 +94,9 @@ def department_view(dept_name):
     cur.execute(query, params)
     projects = cur.fetchall()
 
-    # Load updates for projects in one query
     project_ids = [str(p.id) for p in projects]
     updates_map = {}
+
     if project_ids:
         placeholders = ",".join("?" for _ in project_ids)
         q = f"""
@@ -101,7 +115,6 @@ def department_view(dept_name):
                 "created_at": r.created_at
             })
 
-    # Convert rows into list-of-dicts for template
     projects_list = []
     for p in projects:
         projects_list.append({
@@ -129,21 +142,21 @@ def department_view(dept_name):
     )
 
 
-# Department statistics dashboard
+# ------------------------------------------------------------
+# Dashboard
+# ------------------------------------------------------------
 @app.route("/<dept_name>/dashboard")
 def department_dashboard(dept_name):
     dept_lower = dept_name.strip().lower()
     conn = get_connection()
     cur = conn.cursor()
 
-    # Ensure dept exists
     cur.execute("SELECT name FROM departments WHERE LOWER(name) = ?", (dept_lower,))
     row = cur.fetchone()
     if not row:
         conn.close()
         return f"Invalid department name: {dept_name}", 400
 
-    # fetch relevant rows
     cur.execute("""
         SELECT status, priority
         FROM projects
@@ -156,21 +169,19 @@ def department_dashboard(dept_name):
     pending = sum(1 for r in rows if (r.status or "").lower() == "pending")
     resolved = sum(1 for r in rows if (r.status or "").lower() == "resolved")
 
-    # priority breakdowns for pending + resolved
     priority_count = {
         "pending": {"high": 0, "medium": 0, "low": 0},
         "resolved": {"high": 0, "medium": 0, "low": 0}
     }
 
     for r in rows:
-        s = (r.status or "").lower()
-        p = (r.priority or "").lower()
-        if p not in ("high", "medium", "low"):
-            continue
-        if s == "pending":
-            priority_count["pending"][p] += 1
-        elif s == "resolved":
-            priority_count["resolved"][p] += 1
+        status = (r.status or "").lower()
+        priority = (r.priority or "").lower()
+        if priority in ("high", "medium", "low"):
+            if status == "pending":
+                priority_count["pending"][priority] += 1
+            elif status == "resolved":
+                priority_count["resolved"][priority] += 1
 
     return render_template(
         "department_stats.html",
@@ -182,7 +193,9 @@ def department_dashboard(dept_name):
     )
 
 
-# Sender lookup & dashboard (unchanged)
+# ------------------------------------------------------------
+# Sender lookup
+# ------------------------------------------------------------
 @app.route("/sender", methods=["GET", "POST"])
 def sender_lookup():
     if request.method == "POST":
@@ -263,7 +276,9 @@ def sender_results():
     )
 
 
-# AJAX endpoint: send reply from admin UI, record update, and send email
+# ------------------------------------------------------------
+# Send reply + auto-resolve
+# ------------------------------------------------------------
 @app.route("/send_reply", methods=["POST"])
 def send_reply():
     project_id = request.form.get("project_id")
@@ -272,37 +287,39 @@ def send_reply():
     if not project_id or not reply_message:
         return jsonify({"ok": False, "error": "Missing project_id or message"}), 400
 
-    # get project owner
     conn = get_connection()
     cur = conn.cursor()
-    cur.execute("SELECT owner_email, project_type FROM projects WHERE id = ?", (project_id,))
+    cur.execute("SELECT owner_email, project_type, status FROM projects WHERE id = ?", (project_id,))
     row = cur.fetchone()
     conn.close()
+
     if not row:
         return jsonify({"ok": False, "error": "Project not found"}), 404
 
     owner_email = row.owner_email
     project_type = row.project_type
+    current_status = (row.status or "").lower()
 
     subject = f"Update on your request: {project_type} (Task {project_id})"
 
-    # send email
+    # send email safely (no line breaks allowed)
+    subject = subject.replace("\n", "").replace("\r", "")
+
     try:
         send_email(to_address=owner_email, subject=subject, body=reply_message)
     except Exception as e:
-        return jsonify({"ok": False, "error": f"Failed to send email: {e}"}), 500
+        return jsonify({"ok": False, "error": str(e)}), 500
 
-    # record update into project_updates
-    try:
-        insert_project_update(
-            project_id=int(project_id),
-            update_message=reply_message,
-            from_email=os.getenv("EMAIL_ADDRESS"),
-            update_type="reply"
-        )
-    except Exception as e:
-        # email was sent, but storing update failed
-        return jsonify({"ok": False, "error": f"Failed to record update: {e}"}), 500
+    insert_project_update(
+        project_id=int(project_id),
+        update_message=reply_message,
+        from_email=os.getenv("EMAIL_ADDRESS"),
+        update_type="reply"
+    )
+
+    # Auto status update (NO extra system message)
+    if is_resolved_message(reply_message) and current_status != "resolved":
+        update_task_status(int(project_id), "resolved")
 
     return jsonify({"ok": True})
 
