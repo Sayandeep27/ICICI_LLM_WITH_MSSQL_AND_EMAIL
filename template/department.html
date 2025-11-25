@@ -1,143 +1,189 @@
-=<!-- template/department.html -->
 <!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <title>{{ dept }} — Projects</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
+
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 </head>
+
 <body>
   <div class="container py-4">
+
     <a href="{{ url_for('home') }}" class="btn btn-link">&larr; Back to departments</a>
     <h2 class="mb-3">{{ dept }} — Projects</h2>
 
+    <!-- =========================
+         FILTER FORM
+    ========================== -->
+    <form method="get" class="row g-3 mb-4">
+
+      <!-- Email Filter -->
+      <div class="col-md-4">
+        <label class="form-label">Search by Email</label>
+        <input type="text" name="email_filter" class="form-control"
+               placeholder="user@email.com"
+               value="{{ email_filter }}">
+      </div>
+
+      <!-- Status Filter -->
+      <div class="col-md-3">
+        <label class="form-label">Status</label>
+        <select class="form-select" name="status">
+          <option value="">All</option>
+          <option value="pending" {% if status_filter=='pending' %}selected{% endif %}>Pending</option>
+          <option value="resolved" {% if status_filter=='resolved' %}selected{% endif %}>Resolved</option>
+        </select>
+      </div>
+
+      <!-- Priority Filter -->
+      <div class="col-md-3">
+        <label class="form-label">Priority</label>
+        <select class="form-select" name="priority">
+          <option value="">All</option>
+          <option value="high" {% if priority_filter=='high' %}selected{% endif %}>High</option>
+          <option value="medium" {% if priority_filter=='medium' %}selected{% endif %}>Medium</option>
+          <option value="low" {% if priority_filter=='low' %}selected{% endif %}>Low</option>
+        </select>
+      </div>
+
+      <!-- Buttons -->
+      <div class="col-md-2 d-flex align-items-end">
+        <button class="btn btn-primary w-100">Filter</button>
+      </div>
+
+      <div class="col-md-12">
+        <a href="{{ url_for('department_view', dept_name=dept) }}" class="btn btn-secondary">
+          Reset Filters
+        </a>
+      </div>
+
+    </form>
+
+    <!-- =========================
+         PROJECTS TABLE
+    ========================== -->
     {% if not projects %}
       <div class="alert alert-info">No projects found for this department.</div>
+
     {% else %}
       <div class="table-responsive">
-        <table class="table table-striped align-middle">
-          <thead>
+        <table class="table table-striped table-bordered">
+          <thead class="table-dark">
             <tr>
               <th>ID</th>
               <th>Type</th>
               <th>Owner</th>
-              <th>Assigned</th>
               <th>Time</th>
               <th>Status</th>
               <th>Priority</th>
               <th>Created</th>
               <th>Summary</th>
               <th>Updates</th>
-              <th>Action</th>
+              <th>Reply</th>
             </tr>
           </thead>
           <tbody>
+
             {% for p in projects %}
             <tr>
               <td>{{ p.id }}</td>
               <td>{{ p.project_type }}</td>
-              <td style="white-space:nowrap;">{{ p.owner_email }}</td>
-              <td>{{ p.assigned_dept }}</td>
-              <td>{{ p.time_required or 'Not specified' }}</td>
-              <td>{{ p.status or 'pending' }}</td>
-              <td>{{ p.priority or 'NOT SPECIFIED' }}</td>
+              <td>{{ p.owner_email }}</td>
+              <td>{{ p.time_required }}</td>
+              <td>{{ p.status }}</td>
+              <td>{{ p.priority }}</td>
               <td>{{ p.created_at }}</td>
-              <td style="max-width:300px;">{{ p.summary or 'No summary provided' }}</td>
-              <td style="max-width:300px;">
-                {% if p.updates %}
-                  <ul class="small">
-                    {% for u in p.updates %}
-                      <li>
-                        <strong>{{ u.update_type }}</strong> by <em>{{ u.from_email }}</em>
-                        <div class="text-muted small">{{ u.created_at }}</div>
-                        <div>{{ u.message|truncate(200) }}</div>
-                      </li>
-                    {% endfor %}
-                  </ul>
-                {% else %}
-                  <div class="text-muted small">No updates</div>
-                {% endif %}
+              <td>{{ p.summary }}</td>
+
+              <!-- Updates -->
+              <td style="max-width:200px">
+                {% for u in p.updates %}
+                  <div class="border p-1 mb-1">
+                    <b>{{ u.from_email }}:</b> {{ u.message }}<br>
+                    <small class="text-muted">{{ u.created_at }}</small>
+                  </div>
+                {% endfor %}
               </td>
+
+              <!-- Reply Button -->
               <td>
-                <button class="btn btn-primary btn-sm reply-btn" data-project-id="{{ p.id }}" data-owner="{{ p.owner_email }}" data-project-type="{{ p.project_type }}">Reply</button>
+                <button class="btn btn-sm btn-primary"
+                        data-bs-toggle="modal"
+                        data-bs-target="#replyModal"
+                        data-project-id="{{ p.id }}">
+                  Reply
+                </button>
               </td>
             </tr>
             {% endfor %}
+
           </tbody>
         </table>
       </div>
     {% endif %}
   </div>
 
-  <!-- Reply modal (Bootstrap) -->
-  <div class="modal fade" id="replyModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-lg">
-      <div class="modal-content">
-        <form id="replyForm">
-          <div class="modal-header">
-            <h5 class="modal-title">Send reply</h5>
-            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-          </div>
-          <div class="modal-body">
-            <div class="mb-2">
-              <label>To</label>
-              <input type="text" id="toAddress" class="form-control" readonly>
-            </div>
-            <div class="mb-2">
-              <label>Message</label>
-              <textarea id="replyMessage" class="form-control" rows="6"></textarea>
-            </div>
-            <div id="replyError" class="alert alert-danger d-none"></div>
-            <input type="hidden" id="projectIdField" name="project_id">
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-            <button type="submit" class="btn btn-primary">Send Reply</button>
-          </div>
-        </form>
-      </div>
+
+  <!-- ============================
+       REPLY MODAL
+  ============================= -->
+  <div class="modal fade" id="replyModal" tabindex="-1">
+    <div class="modal-dialog">
+      <form id="replyForm" class="modal-content">
+
+        <div class="modal-header">
+          <h5 class="modal-title">Send Reply</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+
+        <div class="modal-body">
+          <input type="hidden" name="project_id" id="replyProjectId">
+          <textarea name="reply_message" class="form-control" rows="5"
+                    placeholder="Write your message..." required></textarea>
+        </div>
+
+        <div class="modal-footer">
+          <button class="btn btn-primary" type="submit">Send Reply</button>
+        </div>
+
+      </form>
     </div>
   </div>
 
+  <!-- Bootstrap + Script to inject project ID -->
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
   <script>
-    const replyModal = new bootstrap.Modal(document.getElementById('replyModal'))
+    const replyModal = document.getElementById('replyModal');
+    replyModal.addEventListener('show.bs.modal', function (event) {
+      const button = event.relatedTarget;
+      const projectId = button.getAttribute('data-project-id');
+      document.getElementById('replyProjectId').value = projectId;
+    });
 
-    $(document).on('click', '.reply-btn', function() {
-      const pid = $(this).data('project-id')
-      const owner = $(this).data('owner')
-      const projectType = $(this).data('project-type')
+    // AJAX Submit
+    document.getElementById("replyForm").addEventListener("submit", async function (e) {
+      e.preventDefault();
 
-      $('#projectIdField').val(pid)
-      $('#toAddress').val(owner)
-      $('#replyMessage').val(`Hi,\n\nUpdate on your request (${projectType} / Task ${pid}):\n`)
-      $('#replyError').addClass('d-none').text('')
-      replyModal.show()
-    })
+      const formData = new FormData(this);
 
-    $('#replyForm').on('submit', function(e) {
-      e.preventDefault()
-      const pid = $('#projectIdField').val()
-      const msg = $('#replyMessage').val().trim()
-      if (!pid || !msg) {
-        $('#replyError').removeClass('d-none').text('Please provide message.')
-        return
+      const response = await fetch("/send_reply", {
+        method: "POST",
+        body: formData
+      });
+
+      const result = await response.json();
+
+      if (result.ok) {
+        alert("Reply sent!");
+        location.reload();
+      } else {
+        alert("Error: " + result.error);
       }
-      $.post('/send_reply', { project_id: pid, reply_message: msg })
-        .done(res => {
-          if (res.ok) {
-            location.reload()
-          } else {
-            $('#replyError').removeClass('d-none').text(res.error || 'Unknown error')
-          }
-        })
-        .fail(xhr => {
-          const err = xhr.responseJSON && xhr.responseJSON.error ? xhr.responseJSON.error : 'Failed to send'
-          $('#replyError').removeClass('d-none').text(err)
-        })
-    })
+    });
   </script>
+
 </body>
 </html>

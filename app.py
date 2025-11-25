@@ -3,73 +3,90 @@ from flask import Flask, render_template, request, redirect, url_for, jsonify
 import os
 import urllib.parse
 
-# all functionalities are working properly
-
 from db_writer import (
-    get_connection,
-    ensure_department_exists,
-    insert_project,
-    update_task_status,
-    insert_project_update
+    get_connection, insert_project_update
 )
 from mailer import send_email
-
 from dotenv import load_dotenv
 load_dotenv()
 
 app = Flask(__name__, template_folder="template")
 
 
-# -------------------------------
+# ---------------------------------------------------------
 # Fetch Departments
-# -------------------------------
+# ---------------------------------------------------------
 def fetch_departments():
     conn = get_connection()
     cur = conn.cursor()
-    cur.execute("SELECT name FROM departments WHERE name IS NOT NULL AND name <> '' ORDER BY name")
+    cur.execute("SELECT name FROM departments ORDER BY name")
     departments = [r[0] for r in cur.fetchall()]
     conn.close()
     return departments
 
 
-# -------------------------------
+# ---------------------------------------------------------
 # HOME PAGE
-# -------------------------------
+# ---------------------------------------------------------
 @app.route("/")
 def home():
     departments = fetch_departments()
     return render_template("index.html", departments=departments)
 
 
-# -------------------------------
-# DEPARTMENT VIEW + UPDATES
-# -------------------------------
+# ---------------------------------------------------------
+# DEPARTMENT PAGE WITH FILTERS (status, priority, email)
+# ---------------------------------------------------------
 @app.route("/<dept_name>")
 def department_view(dept_name):
     dept_lower = dept_name.strip().lower()
 
+    # NEW FILTER
+    email_filter = request.args.get("email_filter", "").strip().lower()
+    status_filter = request.args.get("status", "")
+    priority_filter = request.args.get("priority", "")
+
     conn = get_connection()
     cur = conn.cursor()
 
-    cur.execute("SELECT name FROM departments WHERE LOWER(name) = ?", (dept_lower,))
+    # Check if department exists
+    cur.execute("SELECT name FROM departments WHERE LOWER(name)=?", (dept_lower,))
     row = cur.fetchone()
     if not row:
         conn.close()
-        return f"Invalid department name: {dept_name}", 400
-
+        return f"Invalid department: {dept_name}", 400
     actual_name = row[0]
 
-    # Fetch projects
-    cur.execute("""
+    # Build Dynamic Query
+    query = """
         SELECT id, project_type, owner_email, assigned_dept,
                time_required, status, priority, created_at, summary
         FROM projects
         WHERE LOWER(assigned_dept) = ?
-        ORDER BY created_at DESC
-    """, (dept_lower,))
+    """
+    params = [dept_lower]
+
+    # Filter by email
+    if email_filter:
+        query += " AND LOWER(owner_email) LIKE ?"
+        params.append(f"%{email_filter}%")
+
+    # Filter by status
+    if status_filter:
+        query += " AND LOWER(status) = ?"
+        params.append(status_filter.lower())
+
+    # Filter by priority
+    if priority_filter:
+        query += " AND LOWER(priority) = ?"
+        params.append(priority_filter.lower())
+
+    query += " ORDER BY created_at DESC"
+
+    cur.execute(query, params)
     projects = cur.fetchall()
 
-    # Fetch updates for these projects
+    # Load project updates
     project_ids = [str(p.id) for p in projects]
     updates_map = {}
 
@@ -92,7 +109,7 @@ def department_view(dept_name):
                 "created_at": r.created_at
             })
 
-    # Build list with updates included
+    # Prepare data
     projects_list = []
     for p in projects:
         projects_list.append({
@@ -109,12 +126,67 @@ def department_view(dept_name):
         })
 
     conn.close()
-    return render_template("department.html", dept=actual_name, projects=projects_list)
+
+    return render_template(
+        "department.html",
+        dept=actual_name,
+        projects=projects_list,
+        status_filter=status_filter,
+        priority_filter=priority_filter,
+        email_filter=email_filter      # NEW
+    )
 
 
-# -------------------------------
-# SENDER LOOKUP PAGE
-# -------------------------------
+# ---------------------------------------------------------
+# DEPARTMENT STATISTICS PAGE
+# ---------------------------------------------------------
+@app.route("/<dept_name>/dashboard")
+def department_dashboard(dept_name):
+    dept_lower = dept_name.strip().lower()
+
+    conn = get_connection()
+    cur = conn.cursor()
+
+    cur.execute("""
+        SELECT status, priority
+        FROM projects
+        WHERE LOWER(assigned_dept)=?
+    """, (dept_lower,))
+
+    rows = cur.fetchall()
+    conn.close()
+
+    total = len(rows)
+    pending = sum(1 for r in rows if (r.status or "").lower() == "pending")
+    resolved = sum(1 for r in rows if (r.status or "").lower() == "resolved")
+
+    pending_priority = {"high": 0, "medium": 0, "low": 0}
+    resolved_priority = {"high": 0, "medium": 0, "low": 0}
+
+    for r in rows:
+        pr = (r.priority or "").lower()
+        if pr not in ["high", "medium", "low"]:
+            continue
+
+        if (r.status or "").lower() == "pending":
+            pending_priority[pr] += 1
+        else:
+            resolved_priority[pr] += 1
+
+    return render_template(
+        "department_stats.html",
+        dept=dept_name,
+        total=total,
+        pending=pending,
+        resolved=resolved,
+        pending_priority=pending_priority,
+        resolved_priority=resolved_priority
+    )
+
+
+# ---------------------------------------------------------
+# SENDER LOOKUP
+# ---------------------------------------------------------
 @app.route("/sender", methods=["GET", "POST"])
 def sender_lookup():
     if request.method == "POST":
@@ -122,13 +194,13 @@ def sender_lookup():
         if not email:
             return render_template("sender_form.html", error="Please enter an email address.")
         return redirect(url_for("sender_results", email=urllib.parse.quote_plus(email)))
-
     return render_template("sender_form.html")
 
 
-# -------------------------------
-# SENDER DASHBOARD + UPDATES
-# -------------------------------
+
+# ---------------------------------------------------------
+# SENDER DASHBOARD
+# ---------------------------------------------------------
 @app.route("/sender/results")
 def sender_results():
     raw_email = request.args.get("email", "")
@@ -148,6 +220,7 @@ def sender_results():
         WHERE LOWER(owner_email) LIKE ?
         ORDER BY created_at DESC
     """, (like_pattern,))
+
     projects = cur.fetchall()
 
     projects_list = []
@@ -168,6 +241,7 @@ def sender_results():
         project_ids.append(str(p.id))
 
     updates_map = {}
+
     if project_ids:
         placeholders = ",".join("?" for _ in project_ids)
         q = f"""
@@ -204,9 +278,9 @@ def sender_results():
     )
 
 
-# -------------------------------
-# ADMIN SEND REPLY + AUTO STATUS UPDATE
-# -------------------------------
+# ---------------------------------------------------------
+# REPLY TO SENDER
+# ---------------------------------------------------------
 @app.route("/send_reply", methods=["POST"])
 def send_reply():
     project_id = request.form.get("project_id")
@@ -215,7 +289,6 @@ def send_reply():
     if not project_id or not reply_message:
         return jsonify({"ok": False, "error": "Missing project_id or message"}), 400
 
-    # Fetch user email
     conn = get_connection()
     cur = conn.cursor()
     cur.execute("SELECT owner_email, project_type FROM projects WHERE id = ?", (project_id,))
@@ -228,15 +301,15 @@ def send_reply():
     owner_email = row.owner_email
     project_type = row.project_type
 
-    subject = f"Update on your request (Task {project_id})"
+    subject = f"Update on your request: {project_type} (Task {project_id})"
 
-    # ---- SEND EMAIL ----
+    # Send Email
     try:
-        send_email(owner_email, subject, reply_message)
+        send_email(to_address=owner_email, subject=subject, body=reply_message)
     except Exception as e:
         return jsonify({"ok": False, "error": f"Failed to send email: {e}"}), 500
 
-    # ---- STORE UPDATE ----
+    # Record update
     try:
         insert_project_update(
             project_id=int(project_id),
@@ -247,23 +320,11 @@ def send_reply():
     except Exception as e:
         return jsonify({"ok": False, "error": f"Failed to record update: {e}"}), 500
 
-    # ---- AUTO-RESOLVE IF KEYWORDS MATCH ----
-    resolved_keywords = ["resolved", "done", "fixed", "completed", "solved", "closed", "no longer needed"]
-
-    lower_msg = reply_message.lower()
-
-    if any(word in lower_msg for word in resolved_keywords):
-        try:
-            update_task_status(project_id, "resolved")
-            print(f"Task {project_id} marked resolved automatically")
-        except Exception as e:
-            return jsonify({"ok": False, "error": f"Failed to update status: {e}"}), 500
-
     return jsonify({"ok": True})
 
 
-# -------------------------------
-# START SERVER
-# -------------------------------
+# ---------------------------------------------------------
+# RUN APP
+# ---------------------------------------------------------
 if __name__ == "__main__":
     app.run(debug=True)
